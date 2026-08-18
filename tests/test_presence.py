@@ -44,27 +44,32 @@ def test_offline_backoff_doubles_and_caps(monitor):
 
 def test_coming_online_resets_backoff(monitor):
     monitor._ping = lambda ip: False
-    force_due(monitor); monitor.check_all()
+    force_due(monitor)
+    monitor.check_all()
     assert monitor.backoff["m"] > monitor.config.online_check_interval
     monitor._ping = lambda ip: True
-    force_due(monitor); monitor.check_all()
+    force_due(monitor)
+    monitor.check_all()
     assert monitor.backoff["m"] == monitor.config.online_check_interval
     assert monitor.devices["m"]["state"] == "online"
 
 
 def test_state_change_persisted_to_db(monitor):
     monitor._ping = lambda ip: True
-    force_due(monitor); monitor.check_all()
+    force_due(monitor)
+    monitor.check_all()
     row = next(d for d in monitor.db.get_devices() if d["mac"] == "m")
     assert row["state"] == "online"
 
 
 def test_get_device_count(monitor):
     monitor._ping = lambda ip: True
-    force_due(monitor); monitor.check_all()
+    force_due(monitor)
+    monitor.check_all()
     assert monitor.get_device_count() == (1, 0)
     monitor._ping = lambda ip: False
-    force_due(monitor); monitor.check_all()
+    force_due(monitor)
+    monitor.check_all()
     assert monitor.get_device_count() == (0, 1)
 
 
