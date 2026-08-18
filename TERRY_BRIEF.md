@@ -43,7 +43,10 @@ starting point for the split described in §3.
       (interface-level + presence keep running); termination routed through an
       idempotent `shutdown()` that cleans the chain and PID file. Verified.
 - [ ] §4.5 `packaging/netpulse.service` renamed + path-reconciled
-- [ ] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)
+- [x] §4.6 Tests — 39 pytest cases across config precedence, OUI lookup, DB
+      upsert/history/retention, presence backoff + mocked ping, JSON/CSV export.
+      No network, no root, no scapy/psutil/netifaces (only dep-free modules
+      under test). Surfaced and fixed G5 (upsert update-path crash).
 - [ ] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
 - [ ] §5 README
 - [ ] Docs, CHANGELOG, packaging config example
@@ -74,6 +77,12 @@ commits so the diffs stay honest.
 - **G3 — Dead code in discovery merge.** `NetpulseDaemon._discovery_cycle()` has a
   `# Mark unreachable devices` block whose body is just `pass`. Harmless, but delete
   or implement it while touching that area.
+- **G5 — Device upsert crashed on the update path.** **FOUND + FIXED** (during §4.6):
+  `Database.upsert_device` selected only `(state, state_changed)` yet read
+  `row["first_seen"]`, so every re-observation of a known device raised
+  `No item with that key`. `StateMonitor.check_all`'s broad `except` swallowed it,
+  pinning device state at `unknown` and freezing the offline backoff. One-line fix
+  (select `first_seen` too); regression-covered by the new DB/presence tests.
 - **G4 — Dependency friction.** `netifaces` is effectively unmaintained and won't build
   cleanly on modern toolchains (confirmed here); `psutil` already exposes interface
   addresses and `scapy` is heavy for one ARP sweep. Not blocking, but worth revisiting
