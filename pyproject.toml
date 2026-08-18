@@ -49,10 +49,6 @@ include = ["netpulse*"]
 [tool.ruff]
 target-version = "py39"
 line-length = 100
-# The single-file prototype is kept only as a historical reference and is not
-# part of the package; it also intentionally contains the un-runnable snippet
-# that the split fixed, so it must not be linted.
-extend-exclude = ["prototype-netmon.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W"]

@@ -8,7 +8,7 @@
 
 ## Status — kickoff
 
-**Started:** 2026-08-18 · **Branch:** `terry/terry-brief-update-6kw2nc` · **Phase:** finishing (docs next)
+**Started:** 2026-08-18 · **Branch:** `terry/terry-brief-update-6kw2nc` · **Phase:** docs complete
 
 Repo baseline established. The prototype and its systemd unit are checked in as the
 starting point for the split described in §3.
@@ -58,8 +58,11 @@ starting point for the split described in §3.
       config), `requirements.txt`, and `.github/workflows/ci.yml` running ruff +
       pytest on 3.9–3.12 unprivileged. Wheel builds (v1.0.0); lint clean after
       removing 4 dead-code findings; both CI steps reproduced green locally.
-- [ ] §5 README
-- [ ] Docs, CHANGELOG, packaging config example
+- [x] §5 README — pitch, live-display ASCII, features, requirements, install
+      (pip + systemd), quickstart, config table, data & privacy, export formats,
+      status & limitations (honest re: per-device bandwidth / G1), uninstall.
+- [x] Docs/CHANGELOG/LICENSE — `docs/configuration.md` (all 23 keys), `CHANGELOG.md`
+      (1.0.0), MIT `LICENSE`; retired the `prototype-netmon.*` reference files.
 
 ---
 
