@@ -1,0 +1,68 @@
+# Netpulse configuration (INI format)
+#
+# Copy to /etc/netpulse/netpulse.conf and edit. Every key is OPTIONAL — anything
+# omitted falls back to the built-in default (shown here). Command-line flags
+# override values in this file, which override the built-in defaults.
+#
+# Section names are cosmetic: keys are read from every section, so you only need
+# to keep them where they read well. List values are comma-separated.
+
+[network]
+# Interface to monitor. "auto" picks the first interface with a default route.
+interface = auto
+# Subnet to sweep, CIDR. "auto" derives it from the interface address/netmask.
+target_subnet = auto
+# Devices to ignore entirely (comma-separated). Empty = none.
+exclude_macs =
+exclude_ips =
+
+[discovery]
+# Seconds between full ARP sweeps.
+discovery_interval = 60
+# ARP timeout per sweep (seconds).
+discovery_timeout = 3.0
+
+[presence]
+# Seconds between ICMP checks for devices currently ONLINE.
+online_check_interval = 10
+# Base seconds between checks for OFFLINE devices (doubles on each miss).
+offline_check_interval = 120
+# ICMP timeout per device (seconds).
+ping_timeout = 1.0
+# ICMP echo requests per check.
+ping_count = 1
+# Upper bound for the offline backoff (seconds).
+max_offline_backoff = 600
+
+[bandwidth]
+# Seconds between bandwidth samples.
+bandwidth_interval = 5
+# Per-device accounting via iptables (requires root). Interface-level sampling
+# via psutil keeps working regardless of this setting.
+use_iptables = true
+# Name of the iptables chain Netpulse manages.
+iptables_chain = NETPULSE_INPUT
+
+[database]
+# SQLite database path.
+db_path = /var/lib/netpulse/netpulse.db
+# Days of bandwidth/state history to keep before pruning.
+db_retention_days = 90
+
+[reporting]
+# Directory for JSON/CSV snapshots.
+export_dir = /var/lib/netpulse/exports
+# Seconds between JSON snapshot writes.
+json_export_interval = 300
+# Seconds between CSV snapshot writes.
+csv_export_interval = 3600
+
+[daemon]
+# PID file path (used in --daemonize mode).
+pid_file = /var/run/netpulse.pid
+# Log file path. Empty = log to stderr.
+log_file = /var/log/netpulse.log
+# Log level: DEBUG, INFO, WARNING, ERROR.
+log_level = INFO
+# Fork into the background on startup.
+daemonize = false

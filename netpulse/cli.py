@@ -8,7 +8,8 @@ import threading
 import time
 from datetime import datetime
 
-from netpulse.config import Config
+from netpulse import __version__
+from netpulse.config import Config, load_config
 from netpulse.daemon import NetpulseDaemon, daemonize
 from netpulse.logging_setup import setup_logging
 
@@ -21,47 +22,77 @@ def parse_args():
             "Examples:\n"
             "  netpulse --daemonize                       # Run as daemon\n"
             "  netpulse --interface eth0 --subnet 10.0.0.0/24  # Custom network\n"
+            "  netpulse --config /etc/netpulse/netpulse.conf   # Load a config file\n"
             "  netpulse --snapshot                        # One-shot JSON dump\n"
             "  netpulse --live                            # Interactive console\n"
         ),
     )
 
-    parser.add_argument("-i", "--interface", default="auto",
+    # Overridable options default to None so we can tell "unset" from "set to the
+    # default value"; the real defaults live in netpulse.config.Config. CLI values
+    # that are provided override the config file, which overrides those defaults.
+    parser.add_argument("--version", action="version",
+                        version=f"netpulse {__version__}")
+    parser.add_argument("-c", "--config", default=None,
+                        help="Path to an INI config file "
+                             "(default: /etc/netpulse/netpulse.conf if present)")
+    parser.add_argument("-i", "--interface", default=None,
                         help="Network interface (default: auto-detect)")
-    parser.add_argument("-s", "--subnet", default="auto",
+    parser.add_argument("-s", "--subnet", default=None,
                         help="Target subnet CIDR (default: auto)")
-    parser.add_argument("-d", "--daemonize", action="store_true",
+    parser.add_argument("-d", "--daemonize", action="store_true", default=None,
                         help="Run as background daemon")
-    parser.add_argument("--db", default="/var/lib/netpulse/netpulse.db",
+    parser.add_argument("--db", default=None,
                         help="Database path")
-    parser.add_argument("--log", default="/var/log/netpulse.log",
+    parser.add_argument("--log", default=None,
                         help="Log file path")
-    parser.add_argument("--log-level", default="INFO",
+    parser.add_argument("--log-level", default=None,
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                         help="Logging level")
     parser.add_argument("--snapshot", action="store_true",
                         help="Print one-shot JSON snapshot and exit")
     parser.add_argument("--live", action="store_true",
                         help="Interactive live TUI display")
-    parser.add_argument("--discovery-interval", type=int, default=60,
+    parser.add_argument("--discovery-interval", type=int, default=None,
                         help="ARP discovery interval (seconds)")
-    parser.add_argument("--online-interval", type=int, default=10,
+    parser.add_argument("--online-interval", type=int, default=None,
                         help="Online check interval (seconds)")
-    parser.add_argument("--offline-interval", type=int, default=120,
+    parser.add_argument("--offline-interval", type=int, default=None,
                         help="Offline check interval base (seconds)")
-    parser.add_argument("--bw-interval", type=int, default=5,
+    parser.add_argument("--bw-interval", type=int, default=None,
                         help="Bandwidth sample interval (seconds)")
-    parser.add_argument("--no-iptables", action="store_true",
+    parser.add_argument("--no-iptables", action="store_true", default=None,
                         help="Disable per-device iptables accounting")
-    parser.add_argument("--export-dir", default="/var/lib/netpulse/exports",
+    parser.add_argument("--export-dir", default=None,
                         help="Export directory for JSON/CSV")
-    parser.add_argument("--retention", type=int, default=90,
+    parser.add_argument("--retention", type=int, default=None,
                         help="Days to retain bandwidth history")
-    parser.add_argument("--pidfile", default="/var/run/netpulse.pid",
+    parser.add_argument("--pidfile", default=None,
                         help="PID file path")
 
     return parser.parse_args()
 
+
+def config_from_args(args) -> Config:
+    """Resolve final config: dataclass defaults < config file < CLI flags."""
+    overrides = {
+        "interface": args.interface,
+        "target_subnet": args.subnet,
+        "discovery_interval": args.discovery_interval,
+        "online_check_interval": args.online_interval,
+        "offline_check_interval": args.offline_interval,
+        "bandwidth_interval": args.bw_interval,
+        # store_true flags are None when unset; only override when actually passed
+        "use_iptables": False if args.no_iptables else None,
+        "db_path": args.db,
+        "log_file": args.log,
+        "log_level": args.log_level,
+        "export_dir": args.export_dir,
+        "db_retention_days": args.retention,
+        "pid_file": args.pidfile,
+        "daemonize": True if args.daemonize else None,
+    }
+    return load_config(path=args.config, cli_overrides=overrides)
 
 
 def run_live_display(daemon: NetpulseDaemon):
@@ -101,34 +132,18 @@ def run_live_display(daemon: NetpulseDaemon):
 
 
 
+
 def main():
     args = parse_args()
-
-    # Build config from args
-    config = Config(
-        interface=args.interface,
-        target_subnet=args.subnet,
-        discovery_interval=args.discovery_interval,
-        online_check_interval=args.online_interval,
-        offline_check_interval=args.offline_interval,
-        bandwidth_interval=args.bw_interval,
-        use_iptables=not args.no_iptables,
-        db_path=args.db,
-        log_file=args.log,
-        log_level=args.log_level,
-        export_dir=args.export_dir,
-        db_retention_days=args.retention,
-        pid_file=args.pidfile,
-        daemonize=args.daemonize,
-    )
+    config = config_from_args(args)
 
     # Setup logging
     setup_logging(config.log_file, config.log_level)
     log = logging.getLogger("netpulse")
 
-    # Daemonize if requested
-    if args.daemonize:
-        daemonize(args.pidfile)
+    # Daemonize if requested (via flag or config file)
+    if config.daemonize:
+        daemonize(config.pid_file)
 
     # Create and run daemon
     daemon = NetpulseDaemon(config)
@@ -153,8 +168,6 @@ def main():
 
     # Run in foreground
     daemon.run()
-
-
 
 
 if __name__ == "__main__":

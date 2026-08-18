@@ -31,7 +31,11 @@ starting point for the split described in §3.
       seams into 12 modules; `netmon`→`netpulse` renamed everywhere; OUI table
       (1909 entries) lifted verbatim; prototype `parse_args` indentation bug
       fixed; full import graph + DB/export smoke-tested. No behavior change.
-- [ ] §4.2 Config file loading (TOML, stdlib) + precedence  ← in progress
+- [x] §4.2 Config file loading + precedence — INI via stdlib `configparser`
+      (chosen over TOML so 3.9–3.12 need no `tomli` fallback); `load_config()`
+      layers defaults < file < CLI; typed coercion, comma-lists, unknown-key
+      warnings; `--config`/`--version` added; `packaging/netpulse.conf.example`
+      ships all 23 keys and round-trips to defaults. Precedence verified.
 - [ ] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
 - [ ] §4.4 Graceful capability checks (root / iptables / raw socket)
 - [ ] §4.5 `packaging/netpulse.service` renamed + path-reconciled
