@@ -8,7 +8,7 @@
 
 ## Status — kickoff
 
-**Started:** 2026-08-18 · **Branch:** `claude/terry-brief-update-6kw2nc` · **Phase:** scaffolding
+**Started:** 2026-08-18 · **Branch:** `terry/terry-brief-update-6kw2nc` · **Phase:** scaffolding
 
 Repo baseline established. The prototype and its systemd unit are checked in as the
 starting point for the split described in §3.
