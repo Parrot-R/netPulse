@@ -1,0 +1,26 @@
+[Unit]
+Description=Netpulse LAN Monitoring Daemon
+Documentation=https://github.com/Parrot-R/netPulse
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+# --pidfile must match PIDFile below and the daemon's default (/var/run/netpulse.pid).
+ExecStart=/usr/local/bin/netpulse --daemonize --pidfile /var/run/netpulse.pid
+ExecStop=/bin/kill -TERM $MAINPID
+PIDFile=/var/run/netpulse.pid
+Restart=on-failure
+RestartSec=30
+
+# Hardening
+PrivateTmp=true
+NoNewPrivileges=true
+# ARP/ICMP need raw sockets; per-device accounting needs iptables (NET_ADMIN).
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BROADCAST
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BROADCAST
+# State dir, log file, and PID file (all under the new netpulse defaults).
+ReadWritePaths=/var/lib/netpulse /var/log/netpulse.log /var/run/netpulse.pid
+
+[Install]
+WantedBy=multi-user.target

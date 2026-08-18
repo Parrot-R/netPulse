@@ -128,17 +128,13 @@ class NetpulseDaemon:
         self._resolve_hostnames(devices)
 
         # Merge: update existing entries, add new ones, keep offline entries
-        discovered_macs = {d["mac"] for d in devices}
         for d in devices:
             mac = d["mac"]
             d["state"] = self.devices.get(mac, {}).get("state", "online")
             self.devices[mac] = d
 
-        # Mark unreachable devices that we already know about
-        for mac in list(self.devices.keys()):
-            if mac not in discovered_macs:
-                # Don't immediately mark offline, let ping decide
-                pass
+        # Devices we already know about but didn't answer this sweep are left as-is;
+        # the adaptive presence checks (ping) decide when to flip them offline.
 
         # Feed to state monitor
         self.state_monitor.update_devices(list(self.devices.values()))

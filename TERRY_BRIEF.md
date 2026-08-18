@@ -8,7 +8,7 @@
 
 ## Status — kickoff
 
-**Started:** 2026-08-18 · **Branch:** `terry/terry-brief-update-6kw2nc` · **Phase:** package split
+**Started:** 2026-08-18 · **Branch:** `terry/terry-brief-update-6kw2nc` · **Phase:** finishing (docs next)
 
 Repo baseline established. The prototype and its systemd unit are checked in as the
 starting point for the split described in §3.
@@ -36,13 +36,19 @@ starting point for the split described in §3.
       layers defaults < file < CLI; typed coercion, comma-lists, unknown-key
       warnings; `--config`/`--version` added; `packaging/netpulse.conf.example`
       ships all 23 keys and round-trips to defaults. Precedence verified.
-- [ ] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
+- [x] §4.3 CLI polish — `--export json|csv` added (one-shot dump of stored state,
+      no scan/root, short-circuits before the daemon is built); foreground `run`
+      documented as the default; `--daemonize`/`--live`/`--config`/`--version`/
+      `--snapshot` all present; epilog examples refreshed. Also fixed G3.
 - [x] §4.4 Graceful capability checks + G2 — startup warns on missing root
       (CAP_NET_RAW/CAP_NET_ADMIN); iptables init now *probes* usability so a
       missing binary or denied permission disables only per-device accounting
       (interface-level + presence keep running); termination routed through an
       idempotent `shutdown()` that cleans the chain and PID file. Verified.
-- [ ] §4.5 `packaging/netpulse.service` renamed + path-reconciled
+- [x] §4.5 systemd unit — `packaging/netpulse.service`: renamed netmon→netpulse;
+      ExecStart `--pidfile` == `PIDFile` == /var/run/netpulse.pid; `ReadWritePaths`
+      now covers state dir + log + pid file; hardening (NoNewPrivileges, PrivateTmp,
+      CapabilityBoundingSet/Ambient) preserved.
 - [x] §4.6 Tests — 39 pytest cases across config precedence, OUI lookup, DB
       upsert/history/retention, presence backoff + mocked ping, JSON/CSV export.
       No network, no root, no scapy/psutil/netifaces (only dep-free modules
@@ -78,9 +84,10 @@ commits so the diffs stay honest.
   removed the leaky handler from `daemonize()`; `NetpulseDaemon` now installs its own
   SIGTERM/SIGINT handlers that route through `shutdown()`, which is idempotent and also
   drops the PID file. `systemctl stop` now tears down the chain cleanly.
-- **G3 — Dead code in discovery merge.** `NetpulseDaemon._discovery_cycle()` has a
-  `# Mark unreachable devices` block whose body is just `pass`. Harmless, but delete
-  or implement it while touching that area.
+- **G3 — Dead code in discovery merge.** **FIXED** (with §4.3): removed the empty
+  `# Mark unreachable devices` / `pass` block (and the now-unused `discovered_macs`
+  set) from `NetpulseDaemon._discovery_cycle()`; replaced with a comment stating the
+  intent (ping decides when a silent device flips offline).
 - **G5 — Device upsert crashed on the update path.** **FOUND + FIXED** (during §4.6):
   `Database.upsert_device` selected only `(state, state_changed)` yet read
   `row["first_seen"]`, so every re-observation of a known device raised

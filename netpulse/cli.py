@@ -10,6 +10,8 @@ from datetime import datetime
 from netpulse import __version__
 from netpulse.config import Config, load_config
 from netpulse.daemon import NetpulseDaemon, daemonize
+from netpulse.db import Database
+from netpulse.export import Exporter
 from netpulse.logging_setup import setup_logging
 
 
@@ -19,10 +21,12 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  netpulse --daemonize                       # Run as daemon\n"
+            "  netpulse                                   # Run in the foreground\n"
+            "  netpulse --daemonize                       # Run as a background daemon\n"
             "  netpulse --interface eth0 --subnet 10.0.0.0/24  # Custom network\n"
             "  netpulse --config /etc/netpulse/netpulse.conf   # Load a config file\n"
-            "  netpulse --snapshot                        # One-shot JSON dump\n"
+            "  netpulse --export json                     # Export stored state and exit\n"
+            "  netpulse --snapshot                        # One-shot live JSON dump\n"
             "  netpulse --live                            # Interactive console\n"
         ),
     )
@@ -48,8 +52,11 @@ def parse_args():
     parser.add_argument("--log-level", default=None,
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                         help="Logging level")
+    parser.add_argument("--export", choices=["json", "csv"], default=None,
+                        help="Export the stored state to the export dir and exit "
+                             "(no scan; works unprivileged)")
     parser.add_argument("--snapshot", action="store_true",
-                        help="Print one-shot JSON snapshot and exit")
+                        help="Run a discovery sweep, print a JSON snapshot, and exit")
     parser.add_argument("--live", action="store_true",
                         help="Interactive live TUI display")
     parser.add_argument("--discovery-interval", type=int, default=None,
@@ -138,6 +145,18 @@ def main():
 
     # Setup logging
     setup_logging(config.log_file, config.log_level)
+
+    # One-shot export of stored state: needs neither a scan, root, nor the full
+    # daemon — just the DB and the exporter. Handle it before anything else.
+    if args.export:
+        db = Database(config.db_path, config.db_retention_days)
+        try:
+            exporter = Exporter(db, config.export_dir)
+            path = exporter.export_json() if args.export == "json" else exporter.export_csv()
+        finally:
+            db.close()
+        print(path)
+        return
 
     # Daemonize if requested (via flag or config file)
     if config.daemonize:
