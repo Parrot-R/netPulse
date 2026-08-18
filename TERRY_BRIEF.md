@@ -47,7 +47,11 @@ starting point for the split described in §3.
       upsert/history/retention, presence backoff + mocked ping, JSON/CSV export.
       No network, no root, no scapy/psutil/netifaces (only dep-free modules
       under test). Surfaced and fixed G5 (upsert update-path crash).
-- [ ] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
+- [x] §4.7 CI + packaging — `pyproject.toml` (PEP 621, console script
+      `netpulse=netpulse.cli:main`, dynamic version from `__init__`, ruff+pytest
+      config), `requirements.txt`, and `.github/workflows/ci.yml` running ruff +
+      pytest on 3.9–3.12 unprivileged. Wheel builds (v1.0.0); lint clean after
+      removing 4 dead-code findings; both CI steps reproduced green locally.
 - [ ] §5 README
 - [ ] Docs, CHANGELOG, packaging config example
 

@@ -1,0 +1,5 @@
+# Runtime dependencies for Netpulse (Linux, Python >= 3.9).
+# The test suite does not need these — see .github/workflows/ci.yml.
+scapy
+psutil
+netifaces
