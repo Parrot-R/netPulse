@@ -31,7 +31,7 @@ starting point for the split described in §3.
       seams into 12 modules; `netmon`→`netpulse` renamed everywhere; OUI table
       (1909 entries) lifted verbatim; prototype `parse_args` indentation bug
       fixed; full import graph + DB/export smoke-tested. No behavior change.
-- [ ] §4.2 Config file loading (TOML, stdlib) + precedence
+- [ ] §4.2 Config file loading (TOML, stdlib) + precedence  ← in progress
 - [ ] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
 - [ ] §4.4 Graceful capability checks (root / iptables / raw socket)
 - [ ] §4.5 `packaging/netpulse.service` renamed + path-reconciled
@@ -39,6 +39,37 @@ starting point for the split described in §3.
 - [ ] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
 - [ ] §5 README
 - [ ] Docs, CHANGELOG, packaging config example
+
+---
+
+## Known gaps (carried from prototype review)
+
+These are real defects found while reading the prototype end-to-end — **not**
+behavior worth "preserving" in the refactor sense. Logged here so they don't get
+lost. The split (§4.1) kept them intact deliberately; they get fixed in their own
+commits so the diffs stay honest.
+
+- **G1 — Per-device bandwidth is effectively a stub.** `BandwidthMonitor._init_iptables`
+  creates the `NETPULSE_INPUT` chain and hooks it into INPUT/FORWARD but never adds
+  per-IP rules, so `_get_iptables_counts()` always parses an empty chain. On top of
+  that, `sample_per_device()` hardcodes `rx_rate=0, tx_rate=0` ("Requires differential;
+  stored raw"). Net effect: per-device rates are always 0. The live display and
+  `get_snapshot()` faithfully show 0 B/s per device. *Fix is real design work — generate
+  per-source/dest ACCEPT rules per discovered device and compute rate deltas between
+  samples. Until then the README must not claim working per-device bandwidth.*
+- **G2 — Daemon leaks iptables state on stop.** `daemonize()` installs a SIGTERM/SIGINT
+  handler that only unlinks the PID file and `sys.exit(0)`; it never calls
+  `daemon.shutdown()`, so `cleanup_iptables()` is skipped. Under systemd
+  (`ExecStop=kill -TERM`) every stop leaves the chain and its INPUT/FORWARD hooks
+  behind. *Fix: route termination through `NetpulseDaemon.shutdown()`. Fold into §4.4
+  (graceful shutdown / capability checks).*
+- **G3 — Dead code in discovery merge.** `NetpulseDaemon._discovery_cycle()` has a
+  `# Mark unreachable devices` block whose body is just `pass`. Harmless, but delete
+  or implement it while touching that area.
+- **G4 — Dependency friction.** `netifaces` is effectively unmaintained and won't build
+  cleanly on modern toolchains (confirmed here); `psutil` already exposes interface
+  addresses and `scapy` is heavy for one ARP sweep. Not blocking, but worth revisiting
+  before 1.0 — a lighter dependency set makes this easier to self-host.
 
 ---
 
