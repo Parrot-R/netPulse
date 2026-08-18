@@ -73,14 +73,15 @@ behavior worth "preserving" in the refactor sense. Logged here so they don't get
 lost. The split (§4.1) kept them intact deliberately; they get fixed in their own
 commits so the diffs stay honest.
 
-- **G1 — Per-device bandwidth is effectively a stub.** `BandwidthMonitor._init_iptables`
-  creates the `NETPULSE_INPUT` chain and hooks it into INPUT/FORWARD but never adds
-  per-IP rules, so `_get_iptables_counts()` always parses an empty chain. On top of
-  that, `sample_per_device()` hardcodes `rx_rate=0, tx_rate=0` ("Requires differential;
-  stored raw"). Net effect: per-device rates are always 0. The live display and
-  `get_snapshot()` faithfully show 0 B/s per device. *Fix is real design work — generate
-  per-source/dest ACCEPT rules per discovered device and compute rate deltas between
-  samples. Until then the README must not claim working per-device bandwidth.*
+- **G1 — Per-device bandwidth was a stub.** **FIXED**: `BandwidthMonitor` now installs two
+  targetless counting rules per discovered IP (`-s IP` uploads, `-d IP` downloads), flushes
+  the chain on init for a clean slate, parses `iptables -L -n -v -x` robustly (source/dest
+  are the last two columns regardless of a target column), and differences successive
+  cumulative counts into real rx/tx rates (clamping counter resets). `psutil` is now an
+  optional import so the module loads/tests without it. New `tests/test_bandwidth.py` (7
+  cases) covers rule install, parsing, rate math, counter reset, and the psutil-absent
+  guard. Scope is documented honestly: iptables INPUT/FORWARD only sees traffic to/from or
+  forwarded through the host (best on a gateway) — inherent, not a defect.
 - **G2 — Daemon leaks iptables state on stop.** ~~`daemonize()` installs a SIGTERM/SIGINT
   handler that only unlinks the PID file and `sys.exit(0)`; it never calls
   `daemon.shutdown()`, so `cleanup_iptables()` is skipped.~~ **FIXED** (with §4.4):

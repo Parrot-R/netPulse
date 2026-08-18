@@ -16,7 +16,9 @@ a structured, tested, installable Python package.
   and `oui`.
 - **Device discovery** — silent ARP sweeps with offline MAC vendor (OUI) lookup.
 - **Presence tracking** — adaptive ICMP checks with exponential backoff for offline hosts.
-- **Interface bandwidth** — per-interface RX/TX sampling via `psutil`.
+- **Bandwidth accounting** — per-interface RX/TX sampling via `psutil`, and per-device
+  RX/TX via iptables counting rules (one per device IP) differenced into rates. Per-device
+  accounting sees traffic to/from or forwarded through the host (best on a gateway).
 - **Persistence & export** — SQLite storage with retention pruning and JSON/CSV snapshots.
 - **Config file support** — INI config loaded from `/etc/netpulse/netpulse.conf` or
   `--config PATH`, with precedence: defaults < file < CLI flags. Every key documented in
@@ -45,10 +47,11 @@ Relative to the original prototype:
 - Removed dead code in the discovery merge and an un-runnable `parse_args` definition that
   had been nested inside the daemon class.
 
-### Known limitations
+### Notes
 
-- **Per-device bandwidth is not yet functional** — the iptables accounting chain has no
-  per-IP rules and recorded per-device rates are always zero. Interface-level bandwidth
-  works. Tracked for a follow-up release.
+- **Per-device bandwidth scope** — accounting uses iptables INPUT/FORWARD counters, so it
+  sees only traffic to/from this host or forwarded through it (a gateway/router accounts
+  the whole LAN; an ordinary host accounts only itself). Counters match on IP, so a DHCP
+  lease change is attributed to whichever device holds the address.
 
 [1.0.0]: https://github.com/Parrot-R/netPulse/releases/tag/v1.0.0

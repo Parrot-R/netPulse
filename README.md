@@ -28,17 +28,17 @@ the long haul.
 ------------------------------------------------------------------------
   IP               MAC                Vendor           State    BW RX        BW TX
 ------------------------------------------------------------------------
-  192.168.1.1      a4:2b:8c:11:22:33  Cisco            online   —            —
-  192.168.1.10     3c:22:fb:aa:bb:cc  Apple            online   —            —
-  192.168.1.14     b8:27:eb:00:11:22  Raspberry Pi     online   —            —
-  192.168.1.20     dc:a6:32:44:55:66  Samsung          offline  —            —
-  192.168.1.42     00:1a:11:99:88:77  Google           online   —            —
+  192.168.1.1      a4:2b:8c:11:22:33  Cisco            online   1.2 MB/s     220.4 KB/s
+  192.168.1.10     3c:22:fb:aa:bb:cc  Apple            online   3.1 MB/s     180.9 KB/s
+  192.168.1.14     b8:27:eb:00:11:22  Raspberry Pi     online   48.2 KB/s    12.7 KB/s
+  192.168.1.20     dc:a6:32:44:55:66  Samsung          offline  0.0 B/s      0.0 B/s
+  192.168.1.42     00:1a:11:99:88:77  Google           online   512.0 KB/s   64.0 KB/s
 
   Press Ctrl+C to exit
 ```
 
-Interface-level bandwidth is live. Per-device bandwidth columns are shown for layout but
-are not yet populated — see [Status & limitations](#status--limitations).
+Both interface-level and per-device bandwidth are live. Per-device figures reflect the
+traffic this host actually sees — see [Status & limitations](#status--limitations).
 
 ---
 
@@ -48,7 +48,8 @@ are not yet populated — see [Status & limitations](#status--limitations).
   offline table (~1,900 prefixes).
 - **Presence tracking** — adaptive ICMP checks: online devices are polled often; offline
   ones back off exponentially (up to a configurable cap) to keep the footprint low.
-- **Interface bandwidth** — per-interface RX/TX rates sampled via `psutil`.
+- **Bandwidth accounting** — per-interface RX/TX rates via `psutil`, and per-device RX/TX
+  via iptables counting rules (one per device IP, differenced into rates).
 - **Persistence & export** — SQLite storage with automatic retention pruning, plus JSON
   and CSV snapshots.
 - **Runs as a daemon** — double-fork daemonize, PID file, hardened systemd unit, and a
@@ -212,10 +213,14 @@ Only run Netpulse on networks you are authorized to monitor.
 
 ## Status & limitations
 
-- **Per-device bandwidth is not yet functional.** The iptables scaffolding exists, but the
-  accounting chain has no per-IP rules and recorded per-device rates are always zero, so the
-  live display's per-device BW columns are placeholders. Interface-level bandwidth is fully
-  working. This is tracked for a follow-up.
+- **Per-device bandwidth reflects what this host can see.** Accounting uses iptables
+  INPUT/FORWARD counters, which only observe traffic **to/from this host or forwarded
+  through it**. On a gateway/router Netpulse therefore accounts the LAN's internet usage;
+  on an ordinary host it accounts only that host's own traffic. This is inherent to the
+  iptables approach, not a defect. Requires root (or `CAP_NET_ADMIN`); without it, only
+  interface-level bandwidth is collected.
+- **Accounting is IP-based.** Devices are keyed by MAC, but counters match on IP, so a
+  DHCP lease change is attributed to whatever holds the address at the time.
 - **Linux only.** Netpulse depends on `iptables`, `/proc`, and raw sockets.
 
 ---
