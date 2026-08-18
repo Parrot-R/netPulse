@@ -8,7 +8,7 @@
 
 ## Status — kickoff
 
-**Started:** 2026-08-18 · **Branch:** `terry/terry-brief-update-6kw2nc` · **Phase:** scaffolding
+**Started:** 2026-08-18 · **Branch:** `terry/terry-brief-update-6kw2nc` · **Phase:** package split
 
 Repo baseline established. The prototype and its systemd unit are checked in as the
 starting point for the split described in §3.
@@ -27,7 +27,10 @@ starting point for the split described in §3.
 **Progress log:**
 
 - [x] Repo baseline committed (prototype + service unit + this brief)
-- [ ] §4.1 Package split into `netpulse/` modules
+- [x] §4.1 Package split into `netpulse/` modules — monolith broken along class
+      seams into 12 modules; `netmon`→`netpulse` renamed everywhere; OUI table
+      (1909 entries) lifted verbatim; prototype `parse_args` indentation bug
+      fixed; full import graph + DB/export smoke-tested. No behavior change.
 - [ ] §4.2 Config file loading (TOML, stdlib) + precedence
 - [ ] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
 - [ ] §4.4 Graceful capability checks (root / iptables / raw socket)
