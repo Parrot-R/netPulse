@@ -29,15 +29,43 @@ class BandwidthMonitor:
             self._init_iptables()
 
     def _init_iptables(self):
-        """Create iptables chain for per-IP accounting."""
+        """Create the iptables chain for per-IP accounting.
+
+        Probes iptables usability first so a missing binary or a lack of
+        privileges disables only per-device accounting (with a clear warning);
+        interface-level sampling via psutil keeps working regardless.
+        """
+        chain = self.config.iptables_chain
+
+        # Probe: is iptables present and usable by this process?
         try:
-            chain = self.config.iptables_chain
-            # Create chain
+            probe = subprocess.run(
+                ["iptables", "-L", "-n"],
+                capture_output=True, text=True, check=False
+            )
+        except FileNotFoundError:
+            log.warning("iptables not found; per-device accounting disabled "
+                        "(interface-level bandwidth still active)")
+            return
+        except Exception as e:
+            log.warning("iptables probe failed: %s; per-device accounting disabled "
+                        "(interface-level bandwidth still active)", e)
+            return
+
+        if probe.returncode != 0:
+            detail = (probe.stderr or "").strip() or "permission denied"
+            log.warning("iptables not usable (%s); per-device accounting disabled. "
+                        "Root or CAP_NET_ADMIN is required. Interface-level "
+                        "bandwidth still active.", detail)
+            return
+
+        # Usable: create the chain and hook it into INPUT/FORWARD.
+        try:
+            # Create chain (non-zero return just means it already exists).
             subprocess.run(
                 ["iptables", "-N", chain],
                 capture_output=True, text=True, check=False
             )
-            # Add to INPUT and FORWARD if not already there
             for hook in ["INPUT", "FORWARD"]:
                 existing = subprocess.run(
                     ["iptables", "-C", hook, "-j", chain],
@@ -50,10 +78,8 @@ class BandwidthMonitor:
                     )
             self.iptables_initialized = True
             log.info("iptables accounting chain initialized")
-        except FileNotFoundError:
-            log.warning("iptables not available; falling back to interface-level only")
         except Exception as e:
-            log.warning(f"iptables init failed: {e}")
+            log.warning("iptables init failed: %s; per-device accounting disabled", e)
 
     def _get_iptables_counts(self) -> Dict[str, Dict[str, int]]:
         """Read per-IP byte counts from iptables accounting chain."""

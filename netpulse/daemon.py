@@ -23,6 +23,11 @@ from netpulse.presence import StateMonitor
 log = logging.getLogger("netpulse")
 
 
+def has_root() -> bool:
+    """True if the process is running with an effective uid of 0."""
+    return hasattr(os, "geteuid") and os.geteuid() == 0
+
+
 class NetpulseDaemon:
     """Coordinator for all monitoring threads."""
 
@@ -30,6 +35,7 @@ class NetpulseDaemon:
         self.config = config
         self.running = threading.Event()
         self.running.set()
+        self._stopped = False
 
         # Resolve interface
         if config.interface == "auto":
@@ -50,6 +56,13 @@ class NetpulseDaemon:
         log.info(f"Monitoring interface: {self.iface}")
         log.info(f"Monitoring subnet: {self.subnet}")
 
+        # Warn about missing privileges before building subsystems that need them.
+        # The actual per-subsystem gating happens where it can be probed accurately:
+        # iptables usability inside BandwidthMonitor, raw-socket/ARP failures inside
+        # ARPDiscoverer. This keeps things working under fine-grained capabilities
+        # (e.g. CAP_NET_ADMIN/CAP_NET_RAW) rather than gating purely on uid 0.
+        self._warn_missing_privileges()
+
         # Initialize components
         self.db = Database(config.db_path, config.db_retention_days)
         self.discoverer = ARPDiscoverer(self.iface, config.discovery_timeout)
@@ -63,6 +76,38 @@ class NetpulseDaemon:
         self.last_json_export = 0
         self.last_csv_export = 0
         self.last_purge = 0
+
+    def _warn_missing_privileges(self):
+        """Log a clear warning when privileges needed by some subsystems are absent."""
+        if has_root():
+            return
+        euid = os.geteuid() if hasattr(os, "geteuid") else "?"
+        log.warning(
+            "Not running as root (euid=%s). ARP discovery needs CAP_NET_RAW and "
+            "per-device iptables accounting needs CAP_NET_ADMIN (both typically "
+            "mean root). Presence checks via system ping and interface-level "
+            "bandwidth will still work; affected subsystems degrade with a warning.",
+            euid,
+        )
+
+    def _install_signal_handlers(self):
+        """Route SIGTERM/SIGINT through a graceful shutdown.
+
+        Signals can only be installed from the main thread, so this is a no-op
+        when the daemon runs in a background thread (e.g. behind ``--live``),
+        where Ctrl-C is handled by the foreground display instead.
+        """
+        if threading.current_thread() is not threading.main_thread():
+            return
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                signal.signal(sig, self._handle_signal)
+            except (ValueError, OSError):
+                pass
+
+    def _handle_signal(self, signum, frame):
+        log.info("Received signal %s; shutting down gracefully", signum)
+        self.running.clear()
 
     def _resolve_hostnames(self, devices: List[Dict]):
         """Resolve hostnames for new devices (non-blocking, threaded)."""
@@ -134,6 +179,9 @@ class NetpulseDaemon:
         log.info(f"Bandwidth sampled every {self.config.bandwidth_interval}s")
         log.info(f"Full ARP discovery every {self.config.discovery_interval}s")
 
+        # Route SIGTERM/SIGINT (e.g. `systemctl stop`) through shutdown().
+        self._install_signal_handlers()
+
         # Initial discovery
         self._discovery_cycle()
 
@@ -201,12 +249,36 @@ class NetpulseDaemon:
             return f"{bps / (1024 * 1024 * 1024):.2f} GB/s"
 
     def shutdown(self):
-        """Graceful shutdown."""
-        log.info("Shutting down...")
-        self.bandwidth_monitor.cleanup_iptables()
-        self.db.close()
+        """Graceful shutdown: release iptables state, close the DB, drop the PID file.
+
+        Idempotent — safe to call from a signal handler, the run loop's ``finally``,
+        and the CLI's snapshot/live paths without double-cleanup.
+        """
+        if self._stopped:
+            return
+        self._stopped = True
         self.running.clear()
+        log.info("Shutting down...")
+        try:
+            self.bandwidth_monitor.cleanup_iptables()
+        except Exception as e:
+            log.warning("iptables cleanup failed: %s", e)
+        try:
+            self.db.close()
+        except Exception as e:
+            log.warning("database close failed: %s", e)
+        self._remove_pidfile()
         log.info("Netpulse stopped")
+
+    def _remove_pidfile(self):
+        """Remove the PID file when we own it (i.e. we daemonized)."""
+        if not self.config.daemonize or not self.config.pid_file:
+            return
+        try:
+            if os.path.exists(self.config.pid_file):
+                os.unlink(self.config.pid_file)
+        except OSError as e:
+            log.warning("could not remove pid file %s: %s", self.config.pid_file, e)
 
 
 
@@ -276,15 +348,9 @@ def daemonize(pidfile: str):
         os.dup2(f.fileno(), sys.stdout.fileno())
         os.dup2(f.fileno(), sys.stderr.fileno())
 
-    # Write PID file
+    # Write PID file. Its removal and all other teardown (iptables chain, DB) is
+    # handled by NetpulseDaemon.shutdown(), which the daemon's own SIGTERM/SIGINT
+    # handlers route through — so `systemctl stop` no longer leaves the iptables
+    # chain and PID file behind.
     with open(pidfile, "w") as f:
         f.write(str(os.getpid()))
-
-    # Handle PID cleanup on exit
-    def cleanup(signum=None, frame=None):
-        if os.path.exists(pidfile):
-            os.unlink(pidfile)
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, cleanup)
-    signal.signal(signal.SIGINT, cleanup)

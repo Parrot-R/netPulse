@@ -37,7 +37,11 @@ starting point for the split described in §3.
       warnings; `--config`/`--version` added; `packaging/netpulse.conf.example`
       ships all 23 keys and round-trips to defaults. Precedence verified.
 - [ ] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
-- [ ] §4.4 Graceful capability checks (root / iptables / raw socket)
+- [x] §4.4 Graceful capability checks + G2 — startup warns on missing root
+      (CAP_NET_RAW/CAP_NET_ADMIN); iptables init now *probes* usability so a
+      missing binary or denied permission disables only per-device accounting
+      (interface-level + presence keep running); termination routed through an
+      idempotent `shutdown()` that cleans the chain and PID file. Verified.
 - [ ] §4.5 `packaging/netpulse.service` renamed + path-reconciled
 - [ ] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)
 - [ ] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
@@ -61,12 +65,12 @@ commits so the diffs stay honest.
   `get_snapshot()` faithfully show 0 B/s per device. *Fix is real design work — generate
   per-source/dest ACCEPT rules per discovered device and compute rate deltas between
   samples. Until then the README must not claim working per-device bandwidth.*
-- **G2 — Daemon leaks iptables state on stop.** `daemonize()` installs a SIGTERM/SIGINT
+- **G2 — Daemon leaks iptables state on stop.** ~~`daemonize()` installs a SIGTERM/SIGINT
   handler that only unlinks the PID file and `sys.exit(0)`; it never calls
-  `daemon.shutdown()`, so `cleanup_iptables()` is skipped. Under systemd
-  (`ExecStop=kill -TERM`) every stop leaves the chain and its INPUT/FORWARD hooks
-  behind. *Fix: route termination through `NetpulseDaemon.shutdown()`. Fold into §4.4
-  (graceful shutdown / capability checks).*
+  `daemon.shutdown()`, so `cleanup_iptables()` is skipped.~~ **FIXED** (with §4.4):
+  removed the leaky handler from `daemonize()`; `NetpulseDaemon` now installs its own
+  SIGTERM/SIGINT handlers that route through `shutdown()`, which is idempotent and also
+  drops the PID file. `systemctl stop` now tears down the chain cleanly.
 - **G3 — Dead code in discovery merge.** `NetpulseDaemon._discovery_cycle()` has a
   `# Mark unreachable devices` block whose body is just `pass`. Harmless, but delete
   or implement it while touching that area.
