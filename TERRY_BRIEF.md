@@ -6,7 +6,7 @@
 
 ---
 
-## Status — CLI polish done
+## Status — capability checks done
 
 **Started:** 2026-08-18 · **Branch:** `claude/netpulse-status-e3f73s` · **Phase:** scaffolding
 
@@ -16,8 +16,10 @@ starting point for the split described in §3. §4.1 is done: the monolith lives
 `netmon` → `netpulse` rename from Ground rule #1 applied (paths, chain name, logger
 name, CLI help/epilog, default filenames). §4.2 is done: `netpulse.conf`
 (TOML) loading with `dataclass defaults -> config file -> CLI flags` precedence.
-§4.3 is now done too: `--version` and `--export json|csv` round out the CLI surface
-listed in the brief.
+§4.3 is done: `--version` and `--export json|csv` round out the CLI surface listed
+in the brief. §4.4 is now done too: a new `capabilities.py` detects root /
+raw-socket / iptables availability at startup and disables just the affected
+subsystem instead of crashing or degrading silently.
 
 **Baseline facts (from the prototype):**
 
@@ -89,13 +91,46 @@ listed in the brief.
   a real SQLite DB: both `--export json` and `--export csv` write the expected
   file and print its path.
 
+**Capability checks notes (§4.4):**
+
+- New `netpulse/capabilities.py`: `has_root()` (`os.geteuid() == 0`), `has_raw_socket()`
+  (opens an `AF_PACKET`/`SOCK_RAW` socket and closes it — the actual thing the ARP
+  sweep needs on Linux, not just a root check; falls back to `has_root()` on
+  non-Linux where `AF_PACKET` doesn't exist), and `has_iptables()`
+  (`shutil.which("iptables")`). `check_capabilities()` runs all three once, logs a
+  clear warning per missing capability, and returns a `Capabilities` dataclass —
+  it never raises.
+- `NetpulseDaemon.__init__` calls it right after resolving interface/subnet and
+  before constructing any subsystem, then passes the verdict down instead of
+  letting each subsystem discover the problem on its own:
+  `ARPDiscoverer(..., enabled=capabilities.raw_socket)` and
+  `BandwidthMonitor(..., use_iptables=(config.use_iptables and capabilities.iptables_binary))`.
+  A disabled `ARPDiscoverer.sweep()` now returns `[]` immediately instead of
+  attempting scapy and logging a warning every discovery cycle.
+- Found and fixed a real bug while wiring this up: `BandwidthMonitor._init_iptables`
+  never checked the return codes of the `iptables -N`/`-I` calls, so it set
+  `iptables_initialized = True` unconditionally — a daemon running without root
+  would silently believe per-device accounting was live when every `iptables`
+  invocation had actually failed with "permission denied." Now it checks each
+  return code and bails out (leaving `iptables_initialized = False`) with a
+  specific warning naming which step failed.
+- Verified end-to-end: `check_capabilities()` under simulated non-root/no-raw-socket/
+  no-iptables (patched `os.geteuid`, `socket.socket`, `shutil.which`) reports all
+  three correctly; a disabled `ARPDiscoverer` skips the scapy call entirely; a
+  `BandwidthMonitor` pointed at a fake `iptables` binary that always exits 1 lands
+  on `iptables_initialized == False` (confirming the bug fix) without raising; and
+  a full `NetpulseDaemon` built under all-degraded capabilities completes
+  init → discovery cycle → shutdown with zero crashes. Also re-checked the
+  happy path (real root, real `iptables`, real raw socket in this container) still
+  initializes normally.
+
 **Progress log:**
 
 - [x] Repo baseline committed (prototype + service unit + this brief)
 - [x] §4.1 Package split into `netpulse/` modules
 - [x] §4.2 Config file loading (TOML, stdlib) + precedence
 - [x] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
-- [ ] §4.4 Graceful capability checks (root / iptables / raw socket)
+- [x] §4.4 Graceful capability checks (root / iptables / raw socket)
 - [ ] §4.5 `packaging/netpulse.service` renamed + path-reconciled
 - [ ] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)
 - [ ] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)

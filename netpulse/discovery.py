@@ -70,14 +70,17 @@ def resolve_hostname(ip: str) -> str:
 class ARPDiscoverer:
     """Silent ARP sweep to discover live devices on the subnet."""
 
-    def __init__(self, interface: str, timeout: float = 3.0):
+    def __init__(self, interface: str, timeout: float = 3.0, enabled: bool = True):
         self.interface = interface
         self.timeout = timeout
-        self.own_mac = get_own_mac(interface)
-        self.own_ip = get_interface_ip_and_netmask(interface)[0]
+        self.enabled = enabled
+        self.own_mac = get_own_mac(interface) if enabled else ""
+        self.own_ip = get_interface_ip_and_netmask(interface)[0] if enabled else None
 
     def sweep(self, subnet: str) -> List[Dict]:
         """Perform an ARP scan on the given subnet. Returns list of {ip, mac}."""
+        if not self.enabled:
+            return []
         try:
             conf.iface = self.interface
             conf.verb = 0  # completely silent

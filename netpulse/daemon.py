@@ -9,6 +9,7 @@ import time
 from typing import Dict, List
 
 from .bandwidth import BandwidthMonitor
+from .capabilities import check_capabilities
 from .config import Config
 from .db import Database
 from .discovery import ARPDiscoverer, get_default_interface, get_interface_cidr, resolve_hostname
@@ -45,11 +46,22 @@ class NetpulseDaemon:
         log.info(f"Monitoring interface: {self.iface}")
         log.info(f"Monitoring subnet: {self.subnet}")
 
+        # Detect root / raw-socket / iptables availability up front so a
+        # missing privilege disables just that subsystem instead of the
+        # daemon crashing or spamming a warning every cycle.
+        self.capabilities = check_capabilities(config.use_iptables)
+
         # Initialize components
         self.db = Database(config.db_path, config.db_retention_days)
-        self.discoverer = ARPDiscoverer(self.iface, config.discovery_timeout)
+        self.discoverer = ARPDiscoverer(
+            self.iface, config.discovery_timeout,
+            enabled=self.capabilities.raw_socket,
+        )
         self.state_monitor = StateMonitor(self.db, config)
-        self.bandwidth_monitor = BandwidthMonitor(self.db, config, self.iface)
+        self.bandwidth_monitor = BandwidthMonitor(
+            self.db, config, self.iface,
+            use_iptables=(config.use_iptables and self.capabilities.iptables_binary),
+        )
         self.exporter = Exporter(self.db, config.export_dir)
 
         # Track discovered devices with hostnames

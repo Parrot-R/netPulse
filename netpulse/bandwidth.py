@@ -3,7 +3,7 @@
 import logging
 import subprocess
 import time
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import psutil
 
@@ -16,16 +16,20 @@ log = logging.getLogger("netpulse")
 class BandwidthMonitor:
     """Tracks bandwidth at interface level (psutil) and per-device (iptables)."""
 
-    def __init__(self, db: Database, config: Config, iface: str):
+    def __init__(self, db: Database, config: Config, iface: str,
+                 use_iptables: Optional[bool] = None):
         self.db = db
         self.config = config
         self.iface = iface
         self.prev_iface_counters: Dict[str, Tuple[int, int]] = {}
         self.prev_time = time.time()
 
-        # iptables per-IP tracking
+        # iptables per-IP tracking. `use_iptables` lets the daemon pass a
+        # capability-checked decision in; falls back to config.use_iptables
+        # for direct/test construction.
         self.iptables_initialized = False
-        if config.use_iptables:
+        effective_use_iptables = config.use_iptables if use_iptables is None else use_iptables
+        if effective_use_iptables:
             self._init_iptables()
 
     def _init_iptables(self):
@@ -33,10 +37,17 @@ class BandwidthMonitor:
         try:
             chain = self.config.iptables_chain
             # Create chain
-            subprocess.run(
+            created = subprocess.run(
                 ["iptables", "-N", chain],
                 capture_output=True, text=True, check=False
             )
+            if created.returncode != 0 and "Chain already exists" not in created.stderr:
+                log.warning(
+                    f"iptables chain creation failed ({created.stderr.strip() or 'permission denied?'}); "
+                    "per-device bandwidth accounting disabled (needs root)"
+                )
+                return
+
             # Add to INPUT and FORWARD if not already there
             for hook in ["INPUT", "FORWARD"]:
                 existing = subprocess.run(
@@ -44,10 +55,18 @@ class BandwidthMonitor:
                     capture_output=True, text=True, check=False
                 )
                 if existing.returncode != 0:
-                    subprocess.run(
+                    inserted = subprocess.run(
                         ["iptables", "-I", hook, "-j", chain],
                         capture_output=True, text=True, check=False
                     )
+                    if inserted.returncode != 0:
+                        log.warning(
+                            f"iptables rule insertion into {hook} failed "
+                            f"({inserted.stderr.strip() or 'permission denied?'}); "
+                            "per-device bandwidth accounting disabled"
+                        )
+                        return
+
             self.iptables_initialized = True
             log.info("iptables accounting chain initialized")
         except FileNotFoundError:
