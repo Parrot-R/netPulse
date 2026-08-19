@@ -6,7 +6,7 @@
 
 ---
 
-## Status — CI wired up
+## Status — README + branding shipped
 
 **Started:** 2026-08-18 · **Branch:** `claude/netpulse-status-e3f73s` · **Phase:** scaffolding
 
@@ -25,7 +25,9 @@ reconciled to the new defaults. §4.6 is now done too: 37 pytest tests across
 config/DB/OUI/presence/export, which caught and fixed a real bug that had been
 silently swallowed since the original prototype (see below). §4.7 is now done
 too: `.github/workflows/ci.yml` runs ruff + pytest, unprivileged, across
-Python 3.9-3.12.
+Python 3.9-3.12. §5 is now done too: a full README with an SVG logo/banner, a
+colorized terminal startup banner, and Skymind Automation branding throughout
+(requested directly, off the standard §4 task list).
 
 **Baseline facts (from the prototype):**
 
@@ -231,6 +233,45 @@ Python 3.9-3.12.
   `37 passed`, using only `pytest`/`ruff` with none of the runtime deps
   installed.
 
+**README / branding notes (§5, requested directly by the user):**
+
+- New `netpulse/banner.py`: a colorized startup banner (pulse-wave line +
+  letter-spaced "NETPULSE" wordmark + version + "◆ Skymind Automation" byline),
+  printed to **stderr** — deliberately, so it never lands in `--snapshot`'s or
+  `--export`'s stdout, both of which are meant to be piped/parsed. `--export`
+  skips the banner entirely (cron/script use, not interactive). Color degrades
+  automatically for `NO_COLOR`, `TERM=dumb`, or a non-tty stream — covered by
+  5 new tests in `tests/test_banner.py` (42 total now). Verified by hand: a
+  `--snapshot` run's stdout is still clean, parseable JSON with the banner
+  showing up only on stderr.
+- New `assets/logo.svg` (standalone icon) and `assets/banner.svg` (icon +
+  wordmark lockup for the README header): a network-pulse mark — four LAN
+  "device" nodes wired to a center hub, with an EKG-style pulse line running
+  through it, cyan→violet gradient, Skymind Automation's purple accent on the
+  byline. Hand-authored SVG (no image-gen tooling available in this
+  environment) — verified well-formed as XML and, since `cairosvg` installs
+  cleanly here, actually rendered to PNG and visually checked before writing
+  it into the README rather than trusting the markup blind.
+- Full `README.md` rewrite (was a one-line stub from §4.1): banner image up
+  top, CI/Python/license/no-egress badges, one-line pitch, a terminal
+  transcript combining the startup banner and the live-monitor table (the
+  brief's "screenshot/ASCII of the live display" ask), features, requirements,
+  install (pip + systemd), quickstart, a full 23-key configuration table
+  (cross-checked against `Config`'s actual fields so nothing's stale or
+  invented), the no-egress privacy note, export-format docs, uninstall, and
+  license. Didn't link to `docs/configuration.md` since that file doesn't
+  exist yet (separate, still-open item below) — a README linking its own
+  missing file would be worse than the table standing alone.
+- Added `authors = [{ name = "Skymind Automation" }]` to `pyproject.toml` so
+  the branding shows up in package metadata too, not just the README.
+- Added a new `LICENSE` (MIT, copyright Skymind Automation) — referenced by
+  the README's license section and by `pyproject.toml`'s `license` field, but
+  hadn't actually been created yet; §3's deliverables list included it even
+  though it wasn't its own checklist line.
+- Verified after all of the above: `pytest` → 42 passed, `ruff check` → clean,
+  and a manual CLI run confirming banner-on-stderr / JSON-on-stdout
+  separation and that `--export` suppresses the banner as intended.
+
 **Progress log:**
 
 - [x] Repo baseline committed (prototype + service unit + this brief)
@@ -241,8 +282,9 @@ Python 3.9-3.12.
 - [x] §4.5 `packaging/netpulse.service` renamed + path-reconciled
 - [x] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)
 - [x] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
-- [ ] §5 README
+- [x] §5 README (+ SVG logo/banner + terminal startup banner + Skymind Automation branding)
 - [x] packaging/netpulse.conf.example
+- [x] LICENSE (MIT, Skymind Automation)
 - [ ] Docs (docs/configuration.md), CHANGELOG
 
 ---

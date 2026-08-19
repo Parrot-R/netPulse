@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 
 from . import __version__
+from .banner import print_banner
 from .config import DEFAULT_CONFIG_PATH, resolve_config
 from .daemon import NetpulseDaemon, daemonize
 from .db import Database
@@ -138,6 +139,10 @@ def run_live_display(daemon: NetpulseDaemon):
 
 def main():
     args = parse_args()
+
+    # --export is meant for cron/scripts -- keep its output machine-clean.
+    if not args.export:
+        print_banner(__version__)
 
     # Build config: dataclass defaults -> --config file -> CLI flags
     try:
