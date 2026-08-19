@@ -6,12 +6,15 @@
 
 ---
 
-## Status — kickoff
+## Status — package split done
 
-**Started:** 2026-08-18 · **Branch:** `claude/terry-brief-update-6kw2nc` · **Phase:** scaffolding
+**Started:** 2026-08-18 · **Branch:** `claude/netpulse-status-e3f73s` · **Phase:** scaffolding
 
 Repo baseline established. The prototype and its systemd unit are checked in as the
-starting point for the split described in §3.
+starting point for the split described in §3. §4.1 is now done: the monolith lives in
+`netpulse/` as eleven modules along the class seams described below, with every
+`netmon` → `netpulse` rename from Ground rule #1 applied (paths, chain name, logger
+name, CLI help/epilog, default filenames).
 
 **Baseline facts (from the prototype):**
 
@@ -19,15 +22,34 @@ starting point for the split described in §3.
   `Config` (23 keys), `Database`, `ARPDiscoverer`, `StateMonitor`, `BandwidthMonitor`,
   `Exporter`, `NetMonDaemon`, plus network utils, `lookup_vendor`, `setup_logging`,
   `daemonize`, and `run_live_display`.
-- `OUI_VENDORS` — ~1900 embedded MAC-prefix entries. Lifts cleanly into `oui.py`.
+- `OUI_VENDORS` — ~1900 embedded MAC-prefix entries. Lifts cleanly into `oui.py`
+  (verified: 1909 entries in, 1909 out).
 - `prototype-netmon.service` — Type=forking unit, hardened
   (`NoNewPrivileges`, `CapabilityBoundingSet`, `PrivateTmp`); paths still `netmon.*`,
-  to be renamed and reconciled in `packaging/netpulse.service`.
+  to be renamed and reconciled in `packaging/netpulse.service` (§4.5, not yet done).
+
+**Package split notes:**
+
+- `parse_args()` was mis-indented as a method of `NetMonDaemon` in the prototype (no
+  `self`, called bare in `main()`) — a copy-paste artifact, not intentional nesting.
+  Dedented it to a module-level function in `cli.py`; this is the only way the
+  original code could have actually run.
+- `NetMonDaemon` → `NetpulseDaemon`; logger name `"netmon"` → `"netpulse"`.
+- Added a minimal `pyproject.toml` (console_script `netpulse = netpulse.cli:main`)
+  and a stub `README.md` so the package installs; both get filled in properly under
+  §5 / later packaging tasks.
+- Verified: every module parses, the full import graph resolves (checked against
+  stubbed `scapy`/`psutil`/`netifaces` since this container can't build `netifaces`),
+  `netpulse.config.Config()` produces the renamed default paths, and
+  `netpulse.cli.parse_args(["--help"])` renders correctly.
+- Config file loading (§4.2), CLI polish like `--version` (§4.3), capability checks
+  (§4.4), and tests (§4.6) are deliberately out of scope for this pass — `Config` and
+  `cli.py` are otherwise unchanged from the prototype's behavior.
 
 **Progress log:**
 
 - [x] Repo baseline committed (prototype + service unit + this brief)
-- [ ] §4.1 Package split into `netpulse/` modules
+- [x] §4.1 Package split into `netpulse/` modules
 - [ ] §4.2 Config file loading (TOML, stdlib) + precedence
 - [ ] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
 - [ ] §4.4 Graceful capability checks (root / iptables / raw socket)
