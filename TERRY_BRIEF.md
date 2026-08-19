@@ -6,7 +6,7 @@
 
 ---
 
-## Status — config file loading done
+## Status — CLI polish done
 
 **Started:** 2026-08-18 · **Branch:** `claude/netpulse-status-e3f73s` · **Phase:** scaffolding
 
@@ -14,8 +14,10 @@ Repo baseline established. The prototype and its systemd unit are checked in as 
 starting point for the split described in §3. §4.1 is done: the monolith lives in
 `netpulse/` as eleven modules along the class seams described below, with every
 `netmon` → `netpulse` rename from Ground rule #1 applied (paths, chain name, logger
-name, CLI help/epilog, default filenames). §4.2 is now done too: `netpulse.conf`
+name, CLI help/epilog, default filenames). §4.2 is done: `netpulse.conf`
 (TOML) loading with `dataclass defaults -> config file -> CLI flags` precedence.
+§4.3 is now done too: `--version` and `--export json|csv` round out the CLI surface
+listed in the brief.
 
 **Baseline facts (from the prototype):**
 
@@ -43,6 +45,7 @@ name, CLI help/epilog, default filenames). §4.2 is now done too: `netpulse.conf
   stubbed `scapy`/`psutil`/`netifaces` since this container can't build `netifaces`),
   `netpulse.config.Config()` produces the renamed default paths, and
   `netpulse.cli.parse_args(["--help"])` renders correctly.
+
 **Config file loading notes (§4.2):**
 
 - TOML, flat (no `[section]` tables — the whole `Config` is a flat key set, so no
@@ -61,8 +64,7 @@ name, CLI help/epilog, default filenames). §4.2 is now done too: `netpulse.conf
   `cli_overrides_from_args()` does the argparse-name → Config-field mapping,
   including inverting `--no-iptables` into `use_iptables`.
 - Added `--config PATH` (default `/etc/netpulse/netpulse.conf`) — pulled forward
-  from §4.3's flag list since file-loading is unreachable without it. The rest of
-  §4.3 (`--version`, `--export`, a `run` subcommand) is still open.
+  from §4.3's flag list since file-loading is unreachable without it.
 - An unknown key in the config file raises `ValueError` and `main()` exits(1) with
   a `[!] Config error: ...` message rather than silently ignoring typos.
 - Shipped `packaging/netpulse.conf.example` with all 23 `Config` keys, each
@@ -71,12 +73,28 @@ name, CLI help/epilog, default filenames). §4.2 is now done too: `netpulse.conf
 - Config file loading is not sandboxed against a malicious file beyond type
   parsing — same trust level as any other local config a root daemon reads.
 
+**CLI polish notes (§4.3):**
+
+- `run` (foreground) was already the implicit default with no flags — didn't add a
+  redundant subcommand for it, just spelled it out as the first example in
+  `--help`'s epilog. `--daemonize`, `--live`, and `--config` already landed with
+  §4.2.
+- `--version` uses argparse's built-in `action="version"`, reading
+  `netpulse.__version__` — `netpulse --version` prints `netpulse 1.0.0` and exits 0.
+- `--export {json,csv}` exports the *already-persisted* device DB and exits,
+  deliberately not running a new ARP sweep first (unlike `--snapshot`, which does)
+  — it's meant for pulling a report from a daemon that's already running as a
+  service, so it only needs `Database` + `Exporter`, not the full `NetpulseDaemon`
+  (no interface/subnet resolution, no root required). Verified end-to-end against
+  a real SQLite DB: both `--export json` and `--export csv` write the expected
+  file and print its path.
+
 **Progress log:**
 
 - [x] Repo baseline committed (prototype + service unit + this brief)
 - [x] §4.1 Package split into `netpulse/` modules
 - [x] §4.2 Config file loading (TOML, stdlib) + precedence
-- [ ] §4.3 CLI polish (`run`, `--live`, `--export`, `--version` — `--daemonize` and `--config` already land in §4.2)
+- [x] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
 - [ ] §4.4 Graceful capability checks (root / iptables / raw socket)
 - [ ] §4.5 `packaging/netpulse.service` renamed + path-reconciled
 - [ ] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)

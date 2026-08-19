@@ -8,8 +8,11 @@ import threading
 import time
 from datetime import datetime
 
+from . import __version__
 from .config import DEFAULT_CONFIG_PATH, resolve_config
 from .daemon import NetpulseDaemon, daemonize
+from .db import Database
+from .export import Exporter
 from .logging_setup import setup_logging
 
 
@@ -20,13 +23,18 @@ def parse_args():
         epilog=(
             "Precedence: CLI flags > --config file > built-in defaults.\n\n"
             "Examples:\n"
+            "  netpulse                                   # Run in foreground\n"
             "  netpulse --daemonize                       # Run as daemon\n"
             "  netpulse --interface eth0 --subnet 10.0.0.0/24  # Custom network\n"
             "  netpulse --config /etc/netpulse/netpulse.conf   # Custom config file\n"
             "  netpulse --snapshot                        # One-shot JSON dump\n"
+            "  netpulse --export csv                      # Export the stored DB to CSV and exit\n"
             "  netpulse --live                            # Interactive console\n"
         ),
     )
+
+    parser.add_argument("--version", action="version",
+                        version=f"netpulse {__version__}")
 
     # Unset (None) defaults on everything that maps to a Config field, so
     # resolve_config() can tell "not passed on the CLI" apart from "passed
@@ -47,7 +55,9 @@ def parse_args():
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                         help="Logging level")
     parser.add_argument("--snapshot", action="store_true",
-                        help="Print one-shot JSON snapshot and exit")
+                        help="Run one discovery sweep, print a JSON snapshot, and exit")
+    parser.add_argument("--export", choices=["json", "csv"], default=None,
+                        help="Export the stored device DB (no new sweep) and exit")
     parser.add_argument("--live", action="store_true",
                         help="Interactive live TUI display")
     parser.add_argument("--discovery-interval", type=int, default=None,
@@ -140,6 +150,16 @@ def main():
     # Setup logging
     setup_logging(config.log_file, config.log_level)
     log = logging.getLogger("netpulse")
+
+    # One-shot export of the stored DB -- doesn't touch the network, so it
+    # runs before daemon setup (interface/subnet resolution) altogether.
+    if args.export:
+        db = Database(config.db_path, config.db_retention_days)
+        exporter = Exporter(db, config.export_dir)
+        path = exporter.export_json() if args.export == "json" else exporter.export_csv()
+        print(f"Exported to {path}")
+        db.close()
+        return
 
     # Daemonize if requested
     if config.daemonize:
