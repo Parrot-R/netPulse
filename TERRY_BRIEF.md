@@ -6,7 +6,7 @@
 
 ---
 
-## Status — capability checks done
+## Status — systemd unit renamed
 
 **Started:** 2026-08-18 · **Branch:** `claude/netpulse-status-e3f73s` · **Phase:** scaffolding
 
@@ -17,9 +17,11 @@ starting point for the split described in §3. §4.1 is done: the monolith lives
 name, CLI help/epilog, default filenames). §4.2 is done: `netpulse.conf`
 (TOML) loading with `dataclass defaults -> config file -> CLI flags` precedence.
 §4.3 is done: `--version` and `--export json|csv` round out the CLI surface listed
-in the brief. §4.4 is now done too: a new `capabilities.py` detects root /
-raw-socket / iptables availability at startup and disables just the affected
-subsystem instead of crashing or degrading silently.
+in the brief. §4.4 is done: a new `capabilities.py` detects root / raw-socket /
+iptables availability at startup and disables just the affected subsystem instead
+of crashing or degrading silently. §4.5 is now done too:
+`packaging/netpulse.service` carries the prototype unit forward with every path
+reconciled to the new defaults.
 
 **Baseline facts (from the prototype):**
 
@@ -31,7 +33,7 @@ subsystem instead of crashing or degrading silently.
   (verified: 1909 entries in, 1909 out).
 - `prototype-netmon.service` — Type=forking unit, hardened
   (`NoNewPrivileges`, `CapabilityBoundingSet`, `PrivateTmp`); paths still `netmon.*`,
-  to be renamed and reconciled in `packaging/netpulse.service` (§4.5, not yet done).
+  renamed and reconciled in `packaging/netpulse.service` (§4.5).
 
 **Package split notes:**
 
@@ -124,6 +126,29 @@ subsystem instead of crashing or degrading silently.
   happy path (real root, real `iptables`, real raw socket in this container) still
   initializes normally.
 
+**Systemd unit notes (§4.5):**
+
+- `packaging/netpulse.service` carries `prototype-netmon.service` forward with every
+  `netmon` → `netpulse` rename: description, binary path (`/usr/local/bin/netpulse`),
+  `--pidfile`/`PIDFile` (`/var/run/netpulse.pid`), and `ReadWritePaths`
+  (`/var/lib/netpulse`, `/var/log/netpulse.log`) — all reconciled against the same
+  `Config` defaults from §4.1/§4.2, not re-guessed.
+- Added `--config /etc/netpulse/netpulse.conf` to `ExecStart` explicitly (it's
+  already the built-in default, but a service file naming its config path is more
+  legible than relying on an implicit default someone has to go look up).
+- Kept the hardening as-is (`NoNewPrivileges`, `CapabilityBoundingSet`,
+  `AmbientCapabilities`, `PrivateTmp`) and added a comment tying the three
+  capabilities directly to what §4.4's `capabilities.py` checks for: `CAP_NET_RAW`
+  (raw sockets / ARP), `CAP_NET_ADMIN` (iptables), `CAP_NET_BROADCAST` (ARP
+  broadcast) — so a deployment that runs this unqualified as non-root and grants
+  only some of these capabilities gets the exact graceful per-subsystem
+  degradation §4.4 built, documented at the point someone would actually edit it.
+- `prototype-netmon.service` stays in the repo untouched as the baseline artifact
+  (matches how `prototype-netmon.py` was kept as history, not deleted, in §4.1).
+- Verified: `systemd-analyze verify packaging/netpulse.service` parses it cleanly —
+  its only complaint is that `/usr/local/bin/netpulse` isn't installed in this
+  container, which is expected since nothing has `pip install`ed the package yet.
+
 **Progress log:**
 
 - [x] Repo baseline committed (prototype + service unit + this brief)
@@ -131,7 +156,7 @@ subsystem instead of crashing or degrading silently.
 - [x] §4.2 Config file loading (TOML, stdlib) + precedence
 - [x] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
 - [x] §4.4 Graceful capability checks (root / iptables / raw socket)
-- [ ] §4.5 `packaging/netpulse.service` renamed + path-reconciled
+- [x] §4.5 `packaging/netpulse.service` renamed + path-reconciled
 - [ ] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)
 - [ ] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
 - [ ] §5 README
