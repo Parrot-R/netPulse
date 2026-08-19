@@ -6,7 +6,7 @@
 
 ---
 
-## Status — tests added, one real bug found and fixed
+## Status — CI wired up
 
 **Started:** 2026-08-18 · **Branch:** `claude/netpulse-status-e3f73s` · **Phase:** scaffolding
 
@@ -23,7 +23,9 @@ of crashing or degrading silently. §4.5 is done:
 `packaging/netpulse.service` carries the prototype unit forward with every path
 reconciled to the new defaults. §4.6 is now done too: 37 pytest tests across
 config/DB/OUI/presence/export, which caught and fixed a real bug that had been
-silently swallowed since the original prototype (see below).
+silently swallowed since the original prototype (see below). §4.7 is now done
+too: `.github/workflows/ci.yml` runs ruff + pytest, unprivileged, across
+Python 3.9-3.12.
 
 **Baseline facts (from the prototype):**
 
@@ -187,6 +189,48 @@ silently swallowed since the original prototype (see below).
   extra flags.
 - Ran the full suite: `37 passed`.
 
+**CI notes (§4.7):**
+
+- `.github/workflows/ci.yml`: a `lint` job (`ruff check netpulse tests` on 3.12)
+  and a `test` job (`pytest`, matrix over Python 3.9/3.10/3.11/3.12). Both trigger
+  on push and pull_request. Didn't hardcode `branches: [main]` on the push trigger
+  — this repo's actual default branch is `claude/terry-brief-update-6kw2nc`, not
+  `main`, so that would have silently made push-triggered CI never run.
+- The `test` job installs only `pytest`, deliberately not the package's own
+  `scapy`/`psutil`/`netifaces` runtime dependencies — same reasoning as §4.6's
+  test scope: nothing in `tests/` needs them, so the matrix isn't at the mercy of
+  wheel availability for those three packages across four Python versions (this
+  container, for instance, can't build `netifaces` at all). Verified by running
+  the exact CI recipe locally in a throwaway venv with nothing but `pytest`
+  installed: `37 passed`.
+- Added an explicit unprivileged check as its own step
+  (`if [ "$(id -u)" -eq 0 ]; then ... exit 1; fi`) so "tests must pass
+  unprivileged" is enforced by CI itself, not just true by accident of how
+  GitHub-hosted runners happen to be configured.
+- Fixed 5 real `ruff`-caught issues in the process of wiring lint into CI (they'd
+  have failed the first CI run otherwise): an unused `now` in
+  `BandwidthMonitor.sample_per_device`, an f-string with no placeholders and a
+  dead `log` variable in `cli.py`, a dead `last_discovery_check` variable in
+  `NetpulseDaemon.run`'s hot loop, and a redundant local re-import of
+  `IPv4Network` in `discovery.py` shadowing the already-imported module-level
+  one. All cosmetic/dead-code, no behavior change; re-ran the full test suite
+  and a manual daemon smoke test after to confirm.
+- **Worth flagging**: while testing the CI recipe in a clean venv, `pip install
+  ruff` pulled ruff 0.16.3, whose *default* lint rule selection is dramatically
+  larger than 0.15.8's (71 findings vs. 5, adding pyupgrade/flake8-bandit/
+  flake8-datetimez/pylint/isort categories neither version had opted into
+  explicitly). An unpinned `ruff check` in CI would have started failing on a
+  future `pip install ruff` picking up a newer default, for code that hadn't
+  changed. Fixed by adding `[tool.ruff.lint] select = ["E4", "E7", "E9", "F"]`
+  to `pyproject.toml` — ruff's own long-standing classic default — so lint
+  behavior is pinned by config, not by whichever ruff version CI happens to
+  install that day. Verified `ruff check` is clean under both 0.15.8 and 0.16.3
+  with this config in place.
+- Verified the actual CI recipe end-to-end in fresh venvs (not just the repo's
+  ambient Python): `ruff check netpulse tests` → all checks passed; `pytest` →
+  `37 passed`, using only `pytest`/`ruff` with none of the runtime deps
+  installed.
+
 **Progress log:**
 
 - [x] Repo baseline committed (prototype + service unit + this brief)
@@ -196,7 +240,7 @@ silently swallowed since the original prototype (see below).
 - [x] §4.4 Graceful capability checks (root / iptables / raw socket)
 - [x] §4.5 `packaging/netpulse.service` renamed + path-reconciled
 - [x] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)
-- [ ] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
+- [x] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
 - [ ] §5 README
 - [x] packaging/netpulse.conf.example
 - [ ] Docs (docs/configuration.md), CHANGELOG

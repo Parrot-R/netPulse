@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import logging
 import os
 import threading
 import time
@@ -130,7 +129,7 @@ def run_live_display(daemon: NetpulseDaemon):
                       f"{dev['vendor'][:16]:<16} {dev['state']:<8} "
                       f"{daemon._format_bw(rx_rate):<12} {daemon._format_bw(tx_rate):<12}")
 
-            print(f"\n  Press Ctrl+C to exit")
+            print("\n  Press Ctrl+C to exit")
             time.sleep(2)
 
     except KeyboardInterrupt:
@@ -149,7 +148,6 @@ def main():
 
     # Setup logging
     setup_logging(config.log_file, config.log_level)
-    log = logging.getLogger("netpulse")
 
     # One-shot export of the stored DB -- doesn't touch the network, so it
     # runs before daemon setup (interface/subnet resolution) altogether.

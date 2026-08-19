@@ -42,7 +42,6 @@ def get_interface_cidr(iface: str) -> Optional[str]:
             # Convert dotted-decimal netmask to prefix length
             mask_bits = sum(bin(int(x)).count("1") for x in mask.split("."))
             network = ip_address(ip).network_address
-            from ipaddress import IPv4Network
             return str(IPv4Network(f"{network}/{mask_bits}", strict=False))
         except Exception:
             return None

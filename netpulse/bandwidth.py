@@ -139,7 +139,6 @@ class BandwidthMonitor:
             return
 
         ip_counts = self._get_iptables_counts()
-        now = time.time()
 
         for mac, device in devices.items():
             ip = device.get("ip")

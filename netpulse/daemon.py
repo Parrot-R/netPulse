@@ -144,7 +144,6 @@ class NetpulseDaemon:
         # Initial discovery
         self._discovery_cycle()
 
-        last_discovery_check = time.time()
         last_bw_sample = time.time()
         last_state_check = time.time()
         last_status = time.time()
@@ -156,7 +155,6 @@ class NetpulseDaemon:
                 # Discovery cycle
                 if now - self.last_discovery >= self.config.discovery_interval:
                     self._discovery_cycle()
-                    last_discovery_check = now
 
                 # State check cycle
                 if now - last_state_check >= 1:  # Check at most once per second
