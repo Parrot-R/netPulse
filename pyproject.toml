@@ -15,8 +15,14 @@ dependencies = [
     "netifaces",
 ]
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [project.scripts]
 netpulse = "netpulse.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["netpulse*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

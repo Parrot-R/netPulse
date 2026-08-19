@@ -6,7 +6,7 @@
 
 ---
 
-## Status — systemd unit renamed
+## Status — tests added, one real bug found and fixed
 
 **Started:** 2026-08-18 · **Branch:** `claude/netpulse-status-e3f73s` · **Phase:** scaffolding
 
@@ -19,9 +19,11 @@ name, CLI help/epilog, default filenames). §4.2 is done: `netpulse.conf`
 §4.3 is done: `--version` and `--export json|csv` round out the CLI surface listed
 in the brief. §4.4 is done: a new `capabilities.py` detects root / raw-socket /
 iptables availability at startup and disables just the affected subsystem instead
-of crashing or degrading silently. §4.5 is now done too:
+of crashing or degrading silently. §4.5 is done:
 `packaging/netpulse.service` carries the prototype unit forward with every path
-reconciled to the new defaults.
+reconciled to the new defaults. §4.6 is now done too: 37 pytest tests across
+config/DB/OUI/presence/export, which caught and fixed a real bug that had been
+silently swallowed since the original prototype (see below).
 
 **Baseline facts (from the prototype):**
 
@@ -149,6 +151,42 @@ reconciled to the new defaults.
   its only complaint is that `/usr/local/bin/netpulse` isn't installed in this
   container, which is expected since nothing has `pip install`ed the package yet.
 
+**Tests notes (§4.6):**
+
+- 37 pytest tests across `tests/test_config.py`, `test_db.py`, `test_oui.py`,
+  `test_presence.py`, `test_export.py` — exactly the coverage areas the brief
+  named. Deliberately did **not** add `test_discovery.py`, `test_bandwidth.py`,
+  `test_daemon.py`, or `test_cli.py`: those modules import `scapy`/`psutil`/
+  `netifaces`, and none of the five target areas need them, so the whole suite
+  stays runnable without those (sometimes hard-to-build, e.g. `netifaces` failed
+  to build in this exact container) third-party deps installed.
+- `tests/conftest.py` inserts the repo root onto `sys.path` so `pytest` works from
+  any cwd without an editable install.
+- `test_presence.py` mocks `netpulse.presence.subprocess.run` — no real ping, no
+  real network — and drives `StateMonitor.check_all()` by forcing `last_checks[mac]
+  = 0` before each call rather than sleeping through real intervals, to assert the
+  exponential-backoff sequence (10 → 20 → 40 → capped) directly.
+- **Found and fixed a real, previously-silent bug while writing `test_db.py`**:
+  `Database.upsert_device`'s existing-row lookup was
+  `SELECT state, state_changed FROM devices WHERE mac = ?`, but the code a few
+  lines later reads `row["first_seen"]` — a column that query never selected.
+  Every upsert of an *already-known* device raised `IndexError: No item with that
+  key`. It never crashed the daemon because `StateMonitor.check_all()` wraps each
+  device's check in a bare `except Exception`, so it silently logged
+  `"Error checking <mac>: No item with that key"` and skipped the rest of that
+  device's cycle — including the backoff update, which is how it also surfaced as
+  a second test failure (`check_all`'s backoff never advanced past its initial
+  value, because the exception fired before the backoff math ran). This meant a
+  device's `first_seen` was recomputed as "now" on every single check that
+  otherwise would have hit the update path, and `state_history`/backoff tracking
+  for already-known devices was effectively broken end to end. Fixed by adding
+  `first_seen` to the `SELECT`; both tests pass with real assertions now, not
+  just "doesn't crash."
+- Added a `test` extra (`pip install .[test]`) and `[tool.pytest.ini_options]`
+  (`testpaths = ["tests"]`) to `pyproject.toml` so bare `pytest` works without
+  extra flags.
+- Ran the full suite: `37 passed`.
+
 **Progress log:**
 
 - [x] Repo baseline committed (prototype + service unit + this brief)
@@ -157,7 +195,7 @@ reconciled to the new defaults.
 - [x] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
 - [x] §4.4 Graceful capability checks (root / iptables / raw socket)
 - [x] §4.5 `packaging/netpulse.service` renamed + path-reconciled
-- [ ] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)
+- [x] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)
 - [ ] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
 - [ ] §5 README
 - [x] packaging/netpulse.conf.example

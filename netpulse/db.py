@@ -90,7 +90,7 @@ class Database:
                       vendor: str = "Unknown", state: str = "online"):
         now = time.time()
         with self.cursor() as cur:
-            cur.execute("SELECT state, state_changed FROM devices WHERE mac = ?", (mac,))
+            cur.execute("SELECT state, state_changed, first_seen FROM devices WHERE mac = ?", (mac,))
             row = cur.fetchone()
             old_state = row["state"] if row else None
             state_changed = row["state_changed"] if row else now
