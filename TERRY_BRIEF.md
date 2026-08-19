@@ -6,15 +6,16 @@
 
 ---
 
-## Status — package split done
+## Status — config file loading done
 
 **Started:** 2026-08-18 · **Branch:** `claude/netpulse-status-e3f73s` · **Phase:** scaffolding
 
 Repo baseline established. The prototype and its systemd unit are checked in as the
-starting point for the split described in §3. §4.1 is now done: the monolith lives in
+starting point for the split described in §3. §4.1 is done: the monolith lives in
 `netpulse/` as eleven modules along the class seams described below, with every
 `netmon` → `netpulse` rename from Ground rule #1 applied (paths, chain name, logger
-name, CLI help/epilog, default filenames).
+name, CLI help/epilog, default filenames). §4.2 is now done too: `netpulse.conf`
+(TOML) loading with `dataclass defaults -> config file -> CLI flags` precedence.
 
 **Baseline facts (from the prototype):**
 
@@ -42,22 +43,47 @@ name, CLI help/epilog, default filenames).
   stubbed `scapy`/`psutil`/`netifaces` since this container can't build `netifaces`),
   `netpulse.config.Config()` produces the renamed default paths, and
   `netpulse.cli.parse_args(["--help"])` renders correctly.
-- Config file loading (§4.2), CLI polish like `--version` (§4.3), capability checks
-  (§4.4), and tests (§4.6) are deliberately out of scope for this pass — `Config` and
-  `cli.py` are otherwise unchanged from the prototype's behavior.
+**Config file loading notes (§4.2):**
+
+- TOML, flat (no `[section]` tables — the whole `Config` is a flat key set, so no
+  nesting is needed). Loaded with stdlib `tomllib` on 3.11+; on 3.9/3.10 (where
+  `tomllib` doesn't exist and adding a third-party TOML dep isn't stdlib) a small
+  subset parser in `config.py` (`_parse_simple_toml`) covers the same flat
+  string/int/float/bool/string-array grammar. Verified both parsers produce
+  identical output on `packaging/netpulse.conf.example`.
+- Precedence implemented as three pure functions in `config.py` —
+  `apply_config_file`, `apply_cli_overrides`, composed by `resolve_config()` — each
+  returning a new `Config` rather than mutating in place.
+- To make "CLI flag not passed" distinguishable from "CLI flag passed with a
+  falsy/default-looking value," every `argparse` option that maps to a `Config`
+  field now defaults to `None` (including the `store_true` flags, via an explicit
+  `default=None`) instead of hardcoding the `Config` default inline. `cli.py`'s
+  `cli_overrides_from_args()` does the argparse-name → Config-field mapping,
+  including inverting `--no-iptables` into `use_iptables`.
+- Added `--config PATH` (default `/etc/netpulse/netpulse.conf`) — pulled forward
+  from §4.3's flag list since file-loading is unreachable without it. The rest of
+  §4.3 (`--version`, `--export`, a `run` subcommand) is still open.
+- An unknown key in the config file raises `ValueError` and `main()` exits(1) with
+  a `[!] Config error: ...` message rather than silently ignoring typos.
+- Shipped `packaging/netpulse.conf.example` with all 23 `Config` keys, each
+  commented; verified it round-trips through `resolve_config` unchanged (it's the
+  defaults) and that both TOML backends parse it identically.
+- Config file loading is not sandboxed against a malicious file beyond type
+  parsing — same trust level as any other local config a root daemon reads.
 
 **Progress log:**
 
 - [x] Repo baseline committed (prototype + service unit + this brief)
 - [x] §4.1 Package split into `netpulse/` modules
-- [ ] §4.2 Config file loading (TOML, stdlib) + precedence
-- [ ] §4.3 CLI polish (`run`, `--daemonize`, `--live`, `--export`, `--config`, `--version`)
+- [x] §4.2 Config file loading (TOML, stdlib) + precedence
+- [ ] §4.3 CLI polish (`run`, `--live`, `--export`, `--version` — `--daemonize` and `--config` already land in §4.2)
 - [ ] §4.4 Graceful capability checks (root / iptables / raw socket)
 - [ ] §4.5 `packaging/netpulse.service` renamed + path-reconciled
 - [ ] §4.6 Tests (config precedence, OUI, DB, presence backoff, export)
 - [ ] §4.7 CI (ruff + pytest, 3.9–3.12, unprivileged)
 - [ ] §5 README
-- [ ] Docs, CHANGELOG, packaging config example
+- [x] packaging/netpulse.conf.example
+- [ ] Docs (docs/configuration.md), CHANGELOG
 
 ---
 
